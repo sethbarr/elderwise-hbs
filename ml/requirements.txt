@@ -1,7 +1,7 @@
 av==19.0.1
+huggingface_hub==1.33.0
 joblib==1.6.0
+mlx==0.32.3
 numpy==2.5.3
 pyarrow==25.0.1
 scikit-learn==1.9.1
-torch==2.14.1
-transformers==5.18.0

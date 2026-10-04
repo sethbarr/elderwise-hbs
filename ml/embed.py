@@ -1,4 +1,4 @@
-"""Turn voice clips into WavLM embeddings for age regression.
+"""Turn voice clips into WavLM embeddings (MLX) for age regression.
 
 Usage: python ml/embed.py voxceleb|cv17
 Writes data/emb-<name>.npz with X (n, layers*768), plus labels.
@@ -7,13 +7,13 @@ import csv, glob, io, sys
 from pathlib import Path
 
 import av
+import mlx.core as mx
 import numpy as np
-import torch
-from transformers import AutoFeatureExtractor, WavLMModel
+
+from wavlm_mlx import WavLM
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
-MODEL = "microsoft/wavlm-base-plus"
 SR = 16000
 MAX_SEC = 10
 
@@ -51,10 +51,11 @@ def items(name):
                                                 split=Path(f).stem.split("-")[0])
 
 
-def main(name):
-    dev = "mps" if torch.backends.mps.is_available() else "cpu"
-    fe = AutoFeatureExtractor.from_pretrained(MODEL)
-    model = WavLMModel.from_pretrained(MODEL).to(dev).eval()
+def main(name, limit=None):
+    # Clip lengths vary, so MLX's buffer cache never reuses and grows until the Mac panics. Cap it hard.
+    mx.set_memory_limit(4 << 30)
+    mx.set_cache_limit(256 << 20)
+    model = WavLM()
     X, meta = [], []
     for i, (src, m) in enumerate(items(name)):
         try:
@@ -63,20 +64,19 @@ def main(name):
             print("skip", e); continue
         if len(wav) < SR:  # under 1 s of audio
             continue
-        inp = fe(wav, sampling_rate=SR, return_tensors="pt").input_values.to(dev)
-        with torch.no_grad():
-            hs = model(inp, output_hidden_states=True).hidden_states  # 13 x (1, T, 768)
-        # Mean + std pool every layer; age cues sit in middle layers.
-        h = torch.stack(hs)[:, 0]
-        X.append(torch.cat([h.mean(1), h.std(1)], -1).flatten().cpu().numpy().astype(np.float16))
+        X.append(model.embed(wav))  # mean + std pool of all 13 layers; age cues sit in middle layers
         meta.append(m)
+        mx.clear_cache()
         if i % 200 == 0:
-            print(name, i, flush=True)
+            print(name, i, f"peak {mx.get_peak_memory() / 2**30:.2f} GB", flush=True)
+        if limit and len(X) >= limit:
+            break
     keys = meta[0].keys()
-    np.savez_compressed(DATA / f"emb-{name}.npz", X=np.stack(X),
+    out = DATA / (f"emb-{name}.npz" if not limit else f"emb-{name}-test.npz")
+    np.savez_compressed(out, X=np.stack(X),
                         **{k: np.array([m[k] for m in meta]) for k in keys})
     print("saved", len(X))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else None)

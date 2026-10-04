@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
@@ -13,6 +13,7 @@ const { version } = JSON.parse(
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  test: { exclude: [...configDefaults.exclude, ".clef-local/**"] },
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },

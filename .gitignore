@@ -36,3 +36,8 @@ docs/superpowers/
 # On-device ML assets (fetched by `bun run models:fetch`)
 public/models/*.task
 public/mediapipe/wasm/
+
+# Clef native provisioning and model assets (never source controlled)
+.clef-local/
+src-tauri/binaries/llama-server*
+*.gguf

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import type { AssessmentDecision } from "./api";
+import { reviewSession } from "./review";
 import { toMessage } from "../../lib/errors";
 import { fetchAiStatus, summarizeAssessment } from "../ai/api";
 import { appendSession } from "../history/api";
@@ -20,6 +22,9 @@ import type {
 } from "./types";
 
 export interface AssessmentState {
+  readonly decision: AssessmentDecision | null;
+  readonly decisionState: "idle" | "pending" | "ready" | "unavailable";
+  readonly decisionError: string | null;
   readonly step: AssessmentStep;
   readonly participant: Participant;
   readonly voiceTasks: readonly VoiceTaskResult[];
@@ -35,6 +40,7 @@ export interface AssessmentState {
 }
 
 export type AssessmentAction =
+  | { readonly type: "SET_DECISION"; readonly decision: AssessmentDecision | null; readonly decisionState: AssessmentState["decisionState"]; readonly decisionError?: string | null }
   | { readonly type: "START"; readonly participant: Participant; readonly startedAt?: string }
   | { readonly type: "SET_PARTICIPANT"; readonly participant: Participant }
   | { readonly type: "COMPLETE_VOICE_TASK"; readonly result: VoiceTaskResult }
@@ -51,6 +57,9 @@ export type AssessmentAction =
 
 export function createInitialAssessmentState(startedAt?: string): AssessmentState {
   return {
+    decision: null,
+    decisionState: "idle",
+    decisionError: null,
     step: "setup",
     participant: { age: null, sex: "unspecified" },
     voiceTasks: [],
@@ -68,6 +77,8 @@ export function createInitialAssessmentState(startedAt?: string): AssessmentStat
 
 export function assessmentReducer(state: AssessmentState, action: AssessmentAction): AssessmentState {
   switch (action.type) {
+    case "SET_DECISION":
+      return { ...state, decision: action.decision, decisionState: action.decisionState, decisionError: action.decisionError ?? null };
     case "START":
       return {
         ...state,
@@ -125,6 +136,9 @@ export function assessmentReducer(state: AssessmentState, action: AssessmentActi
 
 export function useAssessment() {
   const [state, dispatch] = useReducer(assessmentReducer, undefined, createInitialAssessmentState);
+  const generation = useRef(0);
+  const finalizing = useRef(false);
+  useEffect(() => () => { generation.current += 1; }, []);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -169,14 +183,18 @@ export function useAssessment() {
   }, []);
 
   const reset = useCallback(() => {
+    generation.current += 1;
+    finalizing.current = false;
     dispatch({ type: "RESET" });
   }, []);
 
   const finalize = useCallback(async () => {
     const current = stateRef.current;
-    if (current.saveState === "saving" || current.saveState === "saved") {
+    if (finalizing.current || current.saveState === "saving" || current.saveState === "saved") {
       return;
     }
+    finalizing.current = true;
+    const run = generation.current;
     dispatch({ type: "SET_SAVE_STATE", saveState: "saving", error: null });
 
     const completedAt = new Date().toISOString();
@@ -189,6 +207,24 @@ export function useAssessment() {
       vitals: current.vitals,
       eye: current.eye,
       summaryText: null,
+    });
+
+    // A history retry reuses the completed session, including its identity.
+    if (current.session) {
+      try {
+        await appendSession(current.session);
+        if (generation.current === run) dispatch({ type: "SET_SAVE_STATE", saveState: "saved", error: null });
+      } catch (raised) {
+        if (generation.current === run) dispatch({ type: "SET_SAVE_STATE", saveState: "error", error: toMessage(raised) });
+      } finally { if (generation.current === run) finalizing.current = false; }
+      return;
+    }
+    dispatch({ type: "SET_DECISION", decision: null, decisionState: "pending" });
+    // Inference never blocks saving or PDF access. Ignore results after reset/unmount.
+    void reviewSession(preliminarySession, () => generation.current === run, outcome => {
+      dispatch(outcome.state === "ready"
+        ? { type: "SET_DECISION", decision: outcome.decision, decisionState: "ready" }
+        : { type: "SET_DECISION", decision: null, decisionState: "unavailable", decisionError: outcome.error.message });
     });
 
     let summaryText: string | null = null;
@@ -213,6 +249,7 @@ export function useAssessment() {
       summarySource = "local";
     }
 
+    if (generation.current !== run) return;
     const finalSession: AssessmentSession = {
       ...preliminarySession,
       summaryText,
@@ -220,13 +257,15 @@ export function useAssessment() {
 
     try {
       await appendSession(finalSession);
+      if (generation.current !== run) return;
       dispatch({ type: "SET_SESSION", session: finalSession, summarySource });
       dispatch({ type: "SET_SAVE_STATE", saveState: "saved", error: null });
     } catch (raised) {
       const msg = toMessage(raised);
+      if (generation.current !== run) return;
       dispatch({ type: "SET_SESSION", session: finalSession, summarySource });
       dispatch({ type: "SET_SAVE_STATE", saveState: "error", error: msg });
-    }
+    } finally { if (generation.current === run) finalizing.current = false; }
   }, []);
 
   useEffect(() => {

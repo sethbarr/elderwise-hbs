@@ -53,9 +53,11 @@ jobs:
       matrix:
         include:
           - platform: "macos-15" # Apple Silicon (M1+)
-            args: "--target aarch64-apple-darwin"
-          - platform: "macos-15" # Intel
-            args: "--target x86_64-apple-darwin"
+            target: "aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin --config src-tauri/tauri.clef.conf.json"
+          - platform: "macos-15-intel" # Intel
+            target: "x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin --config src-tauri/tauri.clef.conf.json"
 
     runs-on: ${{ matrix.platform }}
     # `secrets.*` is not readable in step-level `if:` expressions, so surface
@@ -87,6 +89,12 @@ jobs:
 
       - name: install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: install native sidecar build dependencies
+        run: brew install cmake openssl@3 ripgrep
+
+      - name: build platform Clef sidecar
+        run: bash scripts/provision-clef.sh "${{ matrix.target }}"
 
       # Import the Developer ID cert into a throwaway keychain, then expose
       # APPLE_SIGNING_IDENTITY to later steps via $GITHUB_ENV. The env var

@@ -5,9 +5,13 @@ import { BandScale } from "../../../ui/BandScale";
 import { ScoreHero } from "../../../ui/ScoreHero";
 import { savePdf } from "../../export/api";
 import { buildAssessmentPdf } from "../../export/assessmentPdf";
+import type { AssessmentDecision } from "../api";
 import type { AssessmentSession } from "../types";
 
 export interface SummaryStepProps {
+  readonly decision?: AssessmentDecision | null;
+  readonly decisionState?: "idle" | "pending" | "ready" | "unavailable";
+  readonly decisionError?: string | null;
   readonly session: AssessmentSession | null;
   readonly summarySource: "llm" | "local" | null;
   readonly saveState: "idle" | "saving" | "saved" | "error";
@@ -15,6 +19,13 @@ export interface SummaryStepProps {
   readonly onRetrySave: () => void;
   readonly onReset: () => void;
 }
+
+const REVIEW_LABELS: Record<AssessmentDecision["route"]["selected"], string> = {
+  routine: "routine wellness follow-up",
+  caregiver_review: "review with a trusted person",
+  clinical_review: "review with a qualified professional",
+  urgent_review: "prioritized human review",
+};
 
 const SCALE_SEGMENTS = [
   { tone: "good" as const, label: "Steady", range: "Optimal range" },
@@ -24,6 +35,9 @@ const SCALE_SEGMENTS = [
 
 export function SummaryStep({
   session,
+  decision,
+  decisionState,
+  decisionError,
   summarySource,
   saveState,
   error,
@@ -74,6 +88,21 @@ export function SummaryStep({
         />
         <BandScale tone={session.overallBand} segments={SCALE_SEGMENTS} />
       </div>
+
+      {decisionState && decisionState !== "idle" && (
+        <div className="panel" role="status" aria-live="polite">
+          <h2>Experimental local review</h2>
+          {decisionState === "pending" && <p className="hint">Preparing your local review. First use downloads the model and may take several minutes. Your summary and report remain available.</p>}
+          {decisionState === "unavailable" && <>
+            <p className="hint">Local review unavailable. Your check-in, history and PDF report remain available.</p>
+            <details><summary>Review details</summary><p>{decisionError}</p><p>Check the model setup and restart Elderwise to retry.</p></details>
+          </>}
+          {decisionState === "ready" && decision && <>
+            <p>Human-review category: {REVIEW_LABELS[decision.route.selected]}.</p>
+            <p className="hint">These experimental model scores are not a diagnosis, medical risk estimate or recommendation for when to seek care. A person should review the measurements and their quality in context.</p>
+          </>}
+        </div>
+      )}
 
       <div className="summary-modules-grid">
         <div className="panel summary-card">

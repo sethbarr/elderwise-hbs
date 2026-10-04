@@ -154,3 +154,18 @@ describe("assessmentReducer", () => {
     expect(resetState.startedAt).toBe("2026-10-04T13:00:00.000Z");
   });
 });
+
+describe("local decision state", () => {
+  it("keeps model failure separate from the completed session and saving", () => {
+    const state = assessmentReducer(createInitialAssessmentState(), {
+      type: "SET_SESSION", session: sampleSession, summarySource: "local",
+    });
+    const failed = assessmentReducer(state, {
+      type: "SET_DECISION", decision: null, decisionState: "unavailable", decisionError: "Model did not start",
+    });
+    expect(failed.session).toBe(sampleSession);
+    expect(failed.error).toBeNull();
+    expect(failed.decisionError).toBe("Model did not start");
+    expect(assessmentReducer(failed, { type: "RESET" }).decisionState).toBe("idle");
+  });
+});

@@ -142,3 +142,7 @@ Apple secrets are present (see `docs/signing-setup.md`), and copies them into
 - Face/iris tracking quality depends on lighting and camera; the UI reports
   coverage and quality per module.
 - One local user; no accounts or sync.
+
+### Local Clef assessment review
+
+The guided check-in can run an experimental human-review decision locally through a Tauri-managed Clef-Flash Q4 llama.cpp sidecar. Model acquisition needs a first-run Hugging Face download; subsequent inference uses the local cache. History, PDF and fallback summaries remain available if the engine fails. See [setup, provisioning, policy and verification](docs/clef-assessment.md).

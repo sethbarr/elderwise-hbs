@@ -88,6 +88,9 @@ export function AssessmentScreen() {
         return (
           <SummaryStep
             session={session}
+            decision={state.decision}
+            decisionState={state.decisionState}
+            decisionError={state.decisionError}
             summarySource={state.summarySource}
             saveState={state.saveState}
             error={state.error}

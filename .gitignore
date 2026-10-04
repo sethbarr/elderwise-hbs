@@ -40,6 +40,7 @@ public/mediapipe/wasm/
 # Voice-age model: datasets, recordings, weights (licensed / biometric — never push)
 /data/
 .venv-ml/
+.venv-face/
 ml/*.joblib
 *.npz
 *.wav

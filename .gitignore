@@ -36,3 +36,23 @@ docs/superpowers/
 # On-device ML assets (fetched by `bun run models:fetch`)
 public/models/*.task
 public/mediapipe/wasm/
+
+# Voice-age model: datasets, recordings, weights (licensed / biometric — never push)
+/data/
+.venv-ml/
+ml/*.joblib
+*.npz
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.mlpackage/
+*.mlmodel
+__pycache__/

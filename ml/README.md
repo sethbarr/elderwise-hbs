@@ -1,6 +1,7 @@
 # Voice age model (research prototype)
 
-Estimates a speaker's age from a short recording. Offline Python only — not yet wired into the app.
+Estimates a speaker's age from a short recording. Offline Python only — not yet wired into the app. **Not usable on app recordings yet:** it does not
+transfer to read speech on consumer mics (see Common Voice below).
 
 ## Pipeline
 
@@ -26,6 +27,37 @@ decade balancing and linear calibration all land at ~7.6 MAE, so the limit is da
 
 `ml/age_model.joblib` is refit on train + test after reporting, so never score it on the VoxCeleb test
 split (it has seen those clips). Fit on `split == "train"` for any evaluation.
+
+## Out-of-domain: Common Voice 17 (read speech, consumer mics)
+
+4,917 clips, 2,749 speakers, decade bands only. Mean predicted age per band:
+
+| Band | n | Midpoint | VoxCeleb-trained (shipped) | CV-trained (5-fold, grouped by speaker) |
+| --- | --- | --- | --- | --- |
+| teens | 700 | 15 | 48.7 | 27.1 |
+| 20s | 2,374 | 25 | 49.2 | 29.5 |
+| 30s | 983 | 35 | 49.9 | 34.6 |
+| 40s | 442 | 45 | 51.7 | 38.4 |
+| 50s | 239 | 55 | 52.5 | 42.5 |
+| 60s | 108 | 65 | 55.2 | 50.0 |
+| 70s | 59 | 75 | 54.1 | 49.6 |
+| 80s | 11 | 85 | 57.9 | 41.9 |
+| MAE vs midpoint | | | 20.9 y (r 0.27) | 8.6 y (r 0.54) |
+
+- The VoxCeleb model predicts ~50 for everyone: it learned the recording conditions, not just the voice
+- WavLM features do carry age in read speech (CV-trained ordering is right up to the 60s), but 60+ are
+  still pulled to ~50. Only 39 CV speakers are 70+, so the limit is again elderly training data
+- No model here can tell 65 from 80, which is the range Elderwise cares about. **Next step is data:**
+  read speech from older adults with true ages (e.g. consented app users), not a different regressor
+
+## Pretrained alternative considered (not used)
+
+`audeering/wav2vec2-large-robust-24-ft-age-gender` was benchmarked on the same clips: VoxCeleb test
+MAE 6.9 y (70s: 8.1 vs our 12.9) and on CV the best 60+ ordering (60s 58.9, 70s 63.3). Rejected:
+
+- **License CC-BY-NC-SA 4.0** — no commercial use
+- It was trained on VoxCeleb2 and Common Voice, so these scores are optimistic (likely speaker overlap)
+- It still underestimates 70+ by ~10 y, so it does not remove the need for elderly data
 
 ## How much speech to record
 

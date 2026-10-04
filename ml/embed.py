@@ -45,8 +45,9 @@ def items(name):
     else:
         import pyarrow.parquet as pq
         for f in sorted(glob.glob(str(DATA / "cv17-age/*.parquet"))):
-            t = pq.read_table(f, columns=["audio", "age", "gender", "client_id"]).to_pylist()
-            for r in t:
+            # Stream small batches: to_pylist() on a whole 400 MB file spikes memory.
+            batches = pq.ParquetFile(f).iter_batches(batch_size=64, columns=["audio", "age", "gender", "client_id"])
+            for r in (r for b in batches for r in b.to_pylist()):
                 yield r["audio"]["bytes"], dict(band=r["age"], gender=r["gender"], speaker=r["client_id"],
                                                 split=Path(f).stem.split("-")[0])
 
